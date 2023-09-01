@@ -1,0 +1,160 @@
+---
+- name: Install Nginx
+  hosts: webserver
+  become: true
+
+  tasks:
+   - name: Install nginx
+     apt:
+        name: nginx
+        state: present
+   - name: Start nginx
+     service:
+        name: nginx
+        state: started
+
+   - name: Copy a file to the target host
+     copy:
+        src: /home/ubuntu/ansible/configuration_file.txt 
+        dest: /etc/nginx/sites-available/fundoo
+
+   - name: Remove a file
+     file:
+        path: /etc/nginx/sites-available/default
+        state: absent
+
+   - name: Remove a file
+     file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+
+   - name: Run nginx -t command
+     command: sudo nginx -t
+
+   - name: Ensure Nginx is restarted
+     service:
+        name: nginx
+        state: restarted
+
+
+- name: Install requriements for chat_app
+  hosts: appserver
+  become: true
+
+  tasks:
+   - name: Install Git
+     apt:
+        name: git
+        state: present
+
+   - name: Install Virtualenv
+     apt:
+        name: virtualenv
+        state: present
+
+   - name: Install Gunicorn
+     apt:
+        name: gunicorn
+        state: present
+
+   - name: Install libpq-dev
+     apt:
+        name: libpq-dev
+        state: present
+
+   - name: install python
+     apt:
+        name: python3-pip
+        state: present
+        
+   - name: install package for chat app
+     apt:
+        name: default-libmysqlclient-dev
+        state: present
+
+   - name: install package for chat app
+     apt:
+        name: libssl-dev
+        state: present
+
+   - name: Clone Repository
+     git:
+        repo: https://github.com/VinitKulkarni/chat_app.git
+        dest: /etc/ubuntu/new_chatapp
+
+   - name: Create virtual environment
+     command: virtualenv -p /usr/bin/python3 /etc/ubuntu/new_chatapp/venv
+     args:
+        creates: /etc/ubuntu/new_chatapp/venv
+
+   - name: Activate virtual environment
+     command: source /etc/ubuntu/new_chatapp/venv/bin/activate
+     args:
+        creates: /etc/ubuntu/new_chatapp/venv/bin/activate
+
+   - name: Install requirements
+     pip:
+        requirements: /etc/ubuntu/new_chatapp/requirements.txt
+        virtualenv: /etc/ubuntu/new_chatapp/venv
+
+   - name: Installing pip dependencies for mysql
+     pip:
+        name: MySQL-python
+        state: present
+
+   - name: Install MySQL server
+     package:
+        name: mysql-server
+        state: present
+
+   - name: Start MySQL service
+     service:
+        name: mysql
+        state: started
+
+   - name: install mysqlclient
+     pip:
+        name: mysqlclient
+        virtualenv: /etc/ubuntu/new_chatapp/venv
+
+   - name: Create database
+     mysql_db: 
+        db: chatdb 
+        state: present
+
+   - name: Run migrate-command
+     django_manage:
+        command: migrate
+        app_path: /etc/ubuntu/new_chatapp/fundoo
+        pythonpath: /etc/ubuntu/new_chatapp/fundoo/fundoo
+        virtualenv: /etc/ubuntu/new_chatapp/venv
+
+   - name: Reload systemd configuration
+     command: sudo systemctl daemon-reload
+
+   - name: Copy a file to the target host
+     copy:
+        src: /home/ubuntu/ansible/gunicorn_service_file.txt
+        dest: /etc/systemd/system/gunicorn.service
+
+   - name: Enable gunicorn service at boot
+     service:
+        name: gunicorn
+        enabled: yes
+
+   - name: Start gunicorn service
+     service:
+        name: gunicorn
+        state: started
+
+   - name: restart gunicorn service
+     systemd:
+        name: gunicorn
+        daemon_reload: yes
+        state: started
+        enabled: yes
+   - name: restart gunicorn service
+     systemd:
+        name: gunicorn
+        state: restarted
+
